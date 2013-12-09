@@ -1,0 +1,120 @@
+#!/usr/local/bin/python
+#==============================================================================
+#filterE
+#v1.1 
+#Gunnar Leffler
+# 5 September 2012
+#This script ignores single or multi line SHEF messages it has seen in the
+#recent past. The history is located in the directory the script is called from.
+#Default 
+#history size is 10000 lines.
+#usage:
+# filterA <filename|history size> <filename>
+#examples:
+# filterA  - takes input from STDIN and returns output to STDOUT
+# filterA 20000 - same as above, limits dictionary to 20000 lines
+# filterA 20000 in.shf - same as above, reads input from in.shf
+#==============================================================================
+
+import sys
+import time
+import os
+
+#Global variables
+shefHistory = []
+shefDictionary = {}
+historySize = 10000
+historyPath = "SHEF.history"
+multiCodes = [".E1",".E2",".E3",".E4",".E5",".E6",".E7",".E8",".E9"]
+
+def readHistory (path): 
+   output = []
+   if os.path.exists(path):
+      theFile = open(path, "r")
+      for s in theFile:
+         output.append(s.strip())
+      theFile.close()
+   return output
+
+def writeHistory (path, lines): 
+   theFile = open(path, "w")
+   count = 0
+   startElement = len(shefHistory) - historySize
+   for s in lines:
+      count += 1
+      if count > startElement:
+         theFile.write(s+"\n")
+   theFile.close()
+
+def isMultiLine(line):
+#Returns 0: if not a multi line message
+#        1: if the first line of a multiline message
+#        2: some other line in a multiline message
+  line = line[:line.find(" ")].replace("R","")
+  if line == ".E":
+    return 1
+  if line in multiCodes:
+    return 2
+  return 0
+
+def processMulti (multi):
+  probe = "".join(multi)
+  if not probe in shefDictionary:
+    for line in multi:
+      print line
+    shefDictionary[probe]=0
+    shefHistory.append(probe)
+  return []
+  
+
+def findNewMessages (path):
+   if path == None:
+      theFile = sys.stdin
+   else:
+      theFile = open(path, "r")
+   lines = theFile.readlines()
+   multi = []
+   for s in lines:
+      st = s.strip()
+      if len (st) < 4: #ignore comments and blank lines
+        pass
+      elif st[0] == ":": 
+        pass
+      elif isMultiLine(st) == 1: #is this the first line in a muliline message?
+        if len(multi) > 0: #if there was a multi part message before, run it thru the filter first
+          multi = processMulti(multi)
+        multi.append(st)
+      elif isMultiLine(st) > 1:
+        multi.append(st)
+      elif len(multi)>0:
+        multi = processMulti(multi)
+      elif not st in shefDictionary:
+         shefHistory.append(st)
+         shefDictionary[st]=0
+         print st
+
+
+#=============================================
+#This is the "entrypoint" for the script
+#=============================================
+shefHistory = readHistory (historyPath)
+shefDictionary = {} #Turns history into dictionary for faster searches
+for line in shefHistory:
+  shefDictionary[line] = 0
+thePath = None #The reader function will use STDIN as default
+if len(sys.argv) == 1:
+   thePath = None #if no file is specified, use STDIN
+elif len(sys.argv) == 2:
+   if sys.argv[1].isdigit(): #You can supply history size as the parameter
+      historySize = int(sys.argv[1])
+   else:
+      thePath = sys.argv[1] 
+else:
+   if sys.argv[1].isdigit(): #You can supply history size as the parameter
+      historySize = int(sys.argv[1])
+      thePath =sys.argv[2]
+   else:
+      historySize = int(sys.argv[2])
+      thePath =sys.argv[1]
+findNewMessages (thePath)  
+writeHistory (historyPath,shefHistory)
